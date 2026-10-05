@@ -1,1 +1,251 @@
 # presupuesto-
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CGM - Presupuestos</title>
+    <!-- html2pdf.js para renderizado exacto de PDF en móvil -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        :root { --primary: #1a365d; --accent: #28a745; --danger: #dc3545; }
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { margin: 0; padding: 12px; background-color: #f0f2f5; color: #333; }
+        
+        .app-card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; }
+        h2 { font-size: 18px; margin-top: 0; color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 6px; }
+        
+        .field { margin-bottom: 12px; }
+        .field label { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; display: block; margin-bottom: 4px; }
+        .field input, .field textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; background: #fafafa; }
+        .field textarea { resize: vertical; height: 70px; }
+        
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        /* Tabla de Conceptos en Móvil */
+        .item-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px; margin-bottom: 10px; position: relative; }
+        .btn-del { position: absolute; top: 8px; right: 8px; background: var(--danger); color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+        
+        /* Botones Principales */
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+        .btn-add { background: #e8f5e9; color: #2e7d32; border: 1px dashed #2e7d32; }
+        .btn-share { background: #25D366; color: white; }
+        .btn-pdf { background: var(--primary); color: white; }
+
+        /* PLANTILLA PDF (Oculta en pantalla, visible al renderizar) */
+        #pdf-container { display: none; }
+        .pdf-page { width: 790px; padding: 30px; background: white; font-family: Arial, sans-serif; font-size: 11px; color: #000; }
+        .pdf-header { display: flex; justify-content: space-between; margin-bottom: 15px; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .pdf-table th, .pdf-table td { border: 1px solid #000; padding: 5px; text-align: left; }
+        .pdf-table th { background: #eee; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <!-- CAPTURA DE DATOS (Interfaz Móvil) -->
+    <div class="app-card">
+        <h2>📋 Datos del Presupuesto</h2>
+        <div class="row-2">
+            <div class="field"><label>Fecha</label><input type="text" id="fecha" value="AGOSTO 7, 2026"></div>
+            <div class="field"><label>Folio</label><input type="text" id="folio" value="GDL-781 A"></div>
+        </div>
+        <div class="field"><label>Cliente / Propietario</label><input type="text" id="cliente" value="ARQ. MANUEL BAIGTS Y/O A QUIEN CORRESPONDA"></div>
+        <div class="field"><label>Proyecto</label><input type="text" id="proyecto" value="PUERTA RECAMARA Y TECHUMBRE DE TERRAZA"></div>
+        <div class="field"><label>Ubicación</label><input type="text" id="ubicacion" value="VALLE DE LOS HELECHOS No. 1611, ZAPOPAN, JALISCO"></div>
+    </div>
+
+    <!-- CONCEPTOS DINÁMICOS -->
+    <div class="app-card">
+        <h2>🏗️ Conceptos</h2>
+        <div id="lista-conceptos"></div>
+        <button class="btn btn-add" onclick="agregarConcepto()">+ Agregar Concepto</button>
+    </div>
+
+    <!-- NOTAS Y ACCIONES -->
+    <div class="app-card">
+        <div class="field">
+            <label>Notas / Condiciones</label>
+            <textarea id="notas">EL IMPORTE DE ESTE PRESUPUESTO ES MÁS I.V.A. EN CASO DE REQUERIR FACTURA, ESTE PRESUPUESTO INCLUYE ÚNICAMENTE LO DESCRITO, SE DEBERÁN DE VERIFICAR LOS VOLÚMENES EN SITIO, EL TIEMPO DE EJECUCIÓN DE LOS TRABAJOS DEPENDERÁ DE LA DISPOSICIÓN DE LAS ÁREAS A TRABAJAR CONSIDERANDO UN MÁXIMO DE 15 DÍAS, SE REQUIERE UN 60% DE ANTICIPO, LOS PAGOS RESTANTES SERÁN CONTRA AVANCES DE OBRA Y/O ENTREGA DE LA MISMA, TODOS LOS TRABAJOS SOLICITADOS NO ENLISTADOS EN ESTE SERÁN COTIZADOS DE MANERA INDEPENDIENTE.</textarea>
+        </div>
+
+        <button class="btn btn-share" onclick="generarYCompartir()">📲 Generar y Enviar por WhatsApp / Correo</button>
+        <button class="btn btn-pdf" onclick="descargarPDF()">📄 Solo Descargar PDF</button>
+    </div>
+
+    <!-- PLANTILLA OCULTA EXACTA PARA PDF -->
+    <div id="pdf-container">
+        <div class="pdf-page" id="pdf-render">
+            <div class="pdf-header">
+                <div>
+                    <h1 style="margin:0; font-size: 26px; color: #1a365d;">CGM</h1>
+                    <strong style="font-size: 10px;">GRUPO CONSTRUCTOR</strong>
+                </div>
+                <div style="text-align: right;">
+                    <div><strong>FECHA:</strong> <span id="p-fecha"></span></div>
+                    <div><strong>PRESUPUESTO:</strong> <span id="p-folio"></span></div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <div><strong>PROPIETARIO:</strong> <span id="p-cliente"></span></div>
+                <div><strong>PROYECTO:</strong> <span id="p-proyecto"></span></div>
+                <div><strong>UBICACIÓN:</strong> <span id="p-ubicacion"></span></div>
+            </div>
+
+            <table class="pdf-table">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">#</th>
+                        <th style="width: 55%;">CONCEPTO</th>
+                        <th style="width: 8%;">U</th>
+                        <th style="width: 8%;">CANT</th>
+                        <th style="width: 12%;">P.U.</th>
+                        <th style="width: 12%;">IMPORTE</th>
+                    </tr>
+                </thead>
+                <tbody id="p-tabla-body"></tbody>
+            </table>
+
+            <div style="text-align: right; margin-top: 15px; font-size: 13px;">
+                <strong>SUMA DE ESTE PRESUPUESTO: <span id="p-total">$0.00</span></strong>
+            </div>
+
+            <div style="margin-top: 5px; font-weight: bold; font-size: 11px;" id="p-total-letra"></div>
+
+            <div style="margin-top: 15px; font-size: 9px; text-align: justify; border-top: 1px solid #ccc; padding-top: 5px;">
+                <strong>NOTAS:</strong> <span id="p-notas"></span>
+            </div>
+
+            <!-- FIRMA Y LOGO FIJOS DE ARQ. ISRAEL CAMPOS C. -->
+            <div style="margin-top: 35px; text-align: center; font-size: 11px;">
+                <strong>ATENTAMENTE</strong><br><br><br>
+                <strong>ARQ. ISRAEL CAMPOS C.</strong><br>
+                <span>CONSTRUCCIONES GENERALES ACABADOS Y MANTENIMIENTO</span><br>
+                <span style="font-size: 9px; color: #555;">www.cgmantenimiento.com | M. 3316199571 | info@cgmantenimiento.com</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let contador = 0;
+
+    // Cargar datos por defecto de muestra
+    window.onload = () => {
+        agregarConcepto("REEMPLAZO DE PUERTA DE RECAMARA POR VENTANA DE ALUMINIO DE 3\" ANODIZADO NEGRO CON CRISTAL CLARO DE 6MM DE ESPESOR DIVIDIDA EN 2 HOJAS UNA SEMIFIJA Y OTRA ABATIBLE, INCLUYE: RETIRO DE PUERTA EXISTENTE, SELLADO DE PERFILES Y VANO, MATERIALES, MANO DE OBRA, ACARREOS, HERRAMIENTA, EQUIPO Y TODO LO NECESARIO PARA SU CORRECTA EJECUCION.", "PZA", 1, 8120);
+        agregarConcepto("HERRERIA DE PROTECCION PARA PUERTA DE RECAMARA PRINCIPAL DE SALIDA A TERRAZA A BASE DE HERRERIA CON PERFIL CUADRADO DE 1 1/2 Y CUADRADO DE 1/2\" SEGÚN DISEÑO DE VENTANAS...", "PZA", 1, 6960);
+    };
+
+    function agregarConcepto(desc = '', u = 'PZA', cant = 1, pu = 0) {
+        contador++;
+        const container = document.getElementById('lista-conceptos');
+        const div = document.createElement('div');
+        div.className = 'item-card';
+        div.id = `item-${contador}`;
+        div.innerHTML = `
+            <button class="btn-del" onclick="eliminarConcepto('item-${contador}')">✕</button>
+            <div class="field"><label>Concepto #${contador}</label><textarea class="c-desc">${desc}</textarea></div>
+            <div class="row-2">
+                <div class="field"><label>Unidad</label><input type="text" class="c-u" value="${u}"></div>
+                <div class="field"><label>Cant.</label><input type="number" class="c-cant" value="${cant}"></div>
+            </div>
+            <div class="field"><label>Precio Unitario ($)</label><input type="number" class="c-pu" value="${pu}"></div>
+        `;
+        container.appendChild(div);
+    }
+
+    function eliminarConcepto(id) {
+        document.getElementById(id).remove();
+    }
+
+    function sincronizarDatosPDF() {
+        document.getElementById('p-fecha').innerText = document.getElementById('fecha').value;
+        document.getElementById('p-folio').innerText = document.getElementById('folio').value;
+        document.getElementById('p-cliente').innerText = document.getElementById('cliente').value;
+        document.getElementById('p-proyecto').innerText = document.getElementById('proyecto').value;
+        document.getElementById('p-ubicacion').innerText = document.getElementById('ubicacion').value;
+        document.getElementById('p-notas').innerText = document.getElementById('notas').value;
+
+        const tbody = document.getElementById('p-tabla-body');
+        tbody.innerHTML = '';
+        let total = 0;
+        const items = document.querySelectorAll('.item-card');
+
+        items.forEach((item, index) => {
+            const desc = item.querySelector('.c-desc').value;
+            const u = item.querySelector('.c-u').value;
+            const cant = parseFloat(item.querySelector('.c-cant').value) || 0;
+            const pu = parseFloat(item.querySelector('.c-pu').value) || 0;
+            const importe = cant * pu;
+            total += importe;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="text-align:center;">${index + 1}</td>
+                <td>${desc}</td>
+                <td style="text-align:center;">${u}</td>
+                <td style="text-align:center;">${cant}</td>
+                <td style="text-align:right;">$${pu.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
+                <td style="text-align:right;">$${importe.toLocaleString('es-MX', {minimumFractionDigits: 2})}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('p-total').innerText = '$ ' + total.toLocaleString('es-MX', {minimumFractionDigits: 2});
+        document.getElementById('p-total-letra').innerText = '(' + numeroALetras(total) + ' M.N.)';
+    }
+
+    function numeroALetras(num) {
+        // Formateador dinámico de número a letras en moneda nacional
+        return num.toLocaleString('es-MX', {minimumFractionDigits: 2}) + ' PESOS';
+    }
+
+    function obtenerOpcionesPDF() {
+        return {
+            margin: 10,
+            filename: `Presupuesto_${document.getElementById('folio').value}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
+        };
+    }
+
+    async function descargarPDF() {
+        sincronizarDatosPDF();
+        const element = document.getElementById('pdf-render');
+        document.getElementById('pdf-container').style.display = 'block';
+        await html2pdf().set(obtenerOpcionesPDF()).from(element).save();
+        document.getElementById('pdf-container').style.display = 'none';
+    }
+
+    async function generarYCompartir() {
+        sincronizarDatosPDF();
+        const element = document.getElementById('pdf-render');
+        document.getElementById('pdf-container').style.display = 'block';
+
+        const opt = obtenerOpcionesPDF();
+        const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
+        document.getElementById('pdf-container').style.display = 'none';
+
+        const file = new File([pdfBlob], opt.filename, { type: 'application/pdf' });
+
+        // API Nativa para compartir archivos desde navegadores móviles (iOS / Android)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: 'Presupuesto CGM',
+                    text: `Adjunto presupuesto ${document.getElementById('folio').value} de ${document.getElementById('proyecto').value}.`
+                });
+            } catch (err) {
+                console.log("Compartir cancelado o no soportado:", err);
+            }
+        } else {
+            alert("Tu navegador no soporta el envío directo de archivos. Se descargará el PDF en su lugar.");
+            descargarPDF();
+        }
+    }
+</script>
+</body>
+</html>
